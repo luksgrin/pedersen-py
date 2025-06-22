@@ -1,0 +1,18 @@
+[project]
+name = "pedersen-py"
+version = "0.1.0"
+description = "Pedersen hash function python implementation with rust backend powered by babyjubjub-rs"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "maturin>=1.8.7",
+    "pytest>=8.4.1",
+]
+
+[build-system]
+requires = ["maturin>=1.8.7"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "python"
+features = ["pyo3/extension-module"]

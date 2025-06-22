@@ -1,0 +1,6 @@
+# Python-specific entities
+.venv/
+.python-version
+
+# Rust-specific entities
+target/
