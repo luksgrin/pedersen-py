@@ -1,5 +1,5 @@
 [project]
-name = "pedersen-py"
+name = "pedersenpy"
 version = "0.1.0"
 description = "Pedersen hash function python implementation with rust backend powered by babyjubjub-rs"
 readme = "README.md"

@@ -1,6 +1,7 @@
 # Python-specific entities
 .venv/
 .python-version
+__pycache__/
 
 # Rust-specific entities
 target/

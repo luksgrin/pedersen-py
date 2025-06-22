@@ -1,7 +1,7 @@
-import pedersen_py_backend
+import pedersenpy
 
 def test_add_pass():
-    assert pedersen_py_backend.add(1, 2) == 3
+    assert pedersenpy.add(1, 2) == 3
 
 def test_add_fail():
-    assert pedersen_py_backend.add(1, 2) != 4
+    assert pedersenpy.add(1, 2) != 4

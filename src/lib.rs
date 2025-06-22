@@ -6,7 +6,7 @@ fn add(a: i32, b: i32) -> PyResult<i32> {
 }
 
 #[pymodule]
-fn pedersen_py_backend(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(add, m)?)?;
     Ok(())
 }
