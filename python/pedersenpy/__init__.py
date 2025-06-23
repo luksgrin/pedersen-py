@@ -1,1 +1,1 @@
-from .pedersenpy import PyBabyjubjubPoint
+from .pedersenpy import PyBabyjubjubPoint, PyBabyjubjubPointProjective

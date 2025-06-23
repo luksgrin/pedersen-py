@@ -5,7 +5,7 @@ use num_traits::Num;
 use num_bigint::{BigInt, BigUint};
 
 use ff_ce::{PrimeField, hex};
-use babyjubjub_rs::{Fr, Point as Babyjubjub_point};
+use babyjubjub_rs::{Fr, Point as Babyjubjub_point, PointProjective as Babyjubjub_point_projective};
 
 /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
 /*                       Python Module                        */
@@ -13,6 +13,7 @@ use babyjubjub_rs::{Fr, Point as Babyjubjub_point};
 #[pymodule]
 fn pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBabyjubjubPoint>()?;
+    m.add_class::<PyBabyjubjubPointProjective>()?;
     Ok(())
 }
 
@@ -22,6 +23,11 @@ fn pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
 #[pyclass]
 struct PyBabyjubjubPoint {
     inner: Babyjubjub_point,
+}
+
+#[pyclass]
+struct PyBabyjubjubPointProjective {
+    inner: Babyjubjub_point_projective,
 }
 
 /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
@@ -106,8 +112,92 @@ impl PyBabyjubjubPoint {
         let result = self.inner.mul_scalar(&n_bigint);
         Ok(PyBabyjubjubPoint { inner: result })
     }
+
+    fn to_projective(&self) -> PyBabyjubjubPointProjective {
+        PyBabyjubjubPointProjective {
+            inner: self.inner.projective(),
+        }
+    }
     
 }
+
+#[pymethods]
+impl PyBabyjubjubPointProjective {
+
+    #[new]
+    fn new(py: Python, x: PyObject, y: PyObject, z: PyObject) -> PyResult<Self> {
+        let x_str = pyobject_to_rust_string(py, x)?;
+        let y_str = pyobject_to_rust_string(py, y)?;
+        let z_str = pyobject_to_rust_string(py, z)?;
+        Ok(Self {
+            inner: Babyjubjub_point_projective {
+                x: Fr::from_str(&x_str).unwrap(),
+                y: Fr::from_str(&y_str).unwrap(),
+                z: Fr::from_str(&z_str).unwrap(),
+            }
+        })
+    }
+
+    #[getter]
+    fn x(&self) -> BigUint {
+        let binding = self.inner.x.into_repr();
+        let u64_slice = binding.as_ref();
+        field_element_to_biguint(u64_slice)
+    }
+
+    #[getter]
+    fn y(&self) -> BigUint {
+        let binding = self.inner.y.into_repr();
+        let u64_slice = binding.as_ref();
+        field_element_to_biguint(u64_slice)
+    }
+
+    #[getter]
+    fn z(&self) -> BigUint {
+        let binding = self.inner.z.into_repr();
+        let u64_slice = binding.as_ref();
+        field_element_to_biguint(u64_slice)
+    }
+
+    #[pyo3(name = "__str__")]
+    fn str_(&self) -> String {
+        format!(
+            "PyBabyjubjubPointProjective(x={}, y={}, z={})",
+            biguint_to_hex_string(self.x()),
+            biguint_to_hex_string(self.y()),
+            biguint_to_hex_string(self.z())
+        )
+    }
+
+    #[pyo3(name = "__repr__")]
+    fn repr_(&self) -> String {
+        self.str_()
+    }
+
+    #[pyo3(name = "__mul__")]
+    fn mul_(&self, py: Python, n: PyObject) -> PyResult<Self> {
+        self.mul_scalar(py, n)
+    }
+
+    #[pyo3(name = "__eq__")]
+    fn eq_(&self, other: &PyBabyjubjubPointProjective) -> bool {
+        self.inner.affine().equals(other.inner.affine())
+    }
+
+    fn mul_scalar(&self, py: Python, n: PyObject) -> PyResult<Self> {
+        let n_bigint = pyobject_to_bigint(py, n)?;
+        let affine = self.inner.affine();
+        let result = affine.mul_scalar(&n_bigint);
+        Ok(PyBabyjubjubPointProjective { inner: result.projective() })
+    }
+
+    fn to_affine(&self) -> PyBabyjubjubPoint {
+        PyBabyjubjubPoint {
+            inner: self.inner.affine(),
+        }
+    }
+}
+
 
 /*´:°•.°+.*•´.*:˚.°*.˚•´.°:°•.°•.*•´.*:˚.°*.˚•´.°:°•.°+.*•´.*:*/
 /*                      Helper Functions                      */
