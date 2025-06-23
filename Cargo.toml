@@ -12,4 +12,4 @@ babyjubjub-rs = "0.0.11"
 ff_ce = "0.11.0"
 num-bigint = "0.4.6"
 num-traits = "0.2.19"
-pyo3 = { version = "0.25.1", features = ["extension-module"] }
+pyo3 = { version = "0.25.1", features = ["extension-module", "num-bigint"] }

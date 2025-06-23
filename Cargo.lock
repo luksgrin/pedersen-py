@@ -323,6 +323,7 @@ dependencies = [
  "indoc",
  "libc",
  "memoffset",
+ "num-bigint 0.4.6",
  "once_cell",
  "portable-atomic",
  "pyo3-build-config",
