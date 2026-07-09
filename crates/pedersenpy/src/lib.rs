@@ -87,6 +87,7 @@ impl CircomPedersen {
         }
     }
 
+    /// Hash `data`, returning the 32-byte packed point (circomlibjs `packPoint`).
     fn hash<'py>(&mut self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
         PyBytes::new(py, &self.inner.hash(data))
     }
@@ -119,6 +120,7 @@ impl ZcashPedersen {
         Ok(ZcashPedersen { inner })
     }
 
+    /// Hash `data`, returning the 32-byte little-endian u-coordinate.
     fn hash<'py>(&mut self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
         PyBytes::new(py, &to_bytes(&self.inner.hash(data)))
     }
