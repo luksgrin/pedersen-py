@@ -66,30 +66,53 @@ fn base_point(idx: usize) -> EdwardsProjective {
     unreachable!()
 }
 
+/// Hash `msg` with a circom-faithful configuration and return the packed hex.
+///
+/// Builds one base point per 200-bit segment (50 four-bit windows), so inputs
+/// spanning multiple segments exercise base points 1, 2, … as circom does.
+fn circom_packed(msg: &[u8]) -> String {
+    let n_chunks = (msg.len() * 8).div_ceil(4); // 4-bit windows
+    let n_segments = n_chunks.div_ceil(50).max(1); // 50 windows per segment
+    let generators = (0..n_segments)
+        .map(|s| {
+            let mut powers = Vec::with_capacity(50);
+            let mut cur = base_point(s);
+            for _ in 0..50 {
+                powers.push(cur);
+                for _ in 0..5 {
+                    cur = cur.double(); // POWER_SHIFT = 5  →  ×32 between windows
+                }
+            }
+            powers
+        })
+        .collect();
+    let hasher = Pedersen::<EdwardsProjective, Circom, LsbFirst, WholePoint>::from_params(
+        Parameters::adopt(generators),
+    );
+    pack(&hasher.hash(msg))
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
 #[test]
 fn matches_circomlibjs_hello_vector() {
-    // "Hello" is 40 bits → 10 four-bit windows → a single 200-bit segment,
-    // so only base point 0 is exercised.
-    let base0 = base_point(0);
-    let mut powers = Vec::with_capacity(50);
-    let mut cur = base0;
-    for _ in 0..50 {
-        powers.push(cur);
-        for _ in 0..5 {
-            cur = cur.double(); // POWER_SHIFT = 5  →  ×32 between windows
-        }
-    }
-    let hasher =
-        Pedersen::<EdwardsProjective, Circom, LsbFirst, WholePoint>::from_params(
-            Parameters::adopt(vec![powers]),
-        );
-
-    let packed = pack(&hasher.hash(b"Hello"));
-    let hex: String = packed.iter().map(|b| format!("{b:02x}")).collect();
-
+    // "Hello" is 40 bits → 10 windows → a single segment (base point 0 only).
     assert_eq!(
-        hex,
+        circom_packed(b"Hello"),
         "0e90d7d613ab8b5ea7f4f8bc537db6bb0fa2e5e97bbac1c1f609ef9e6a35fd8b",
-        "should match circomlibjs pedersen.hash(\"Hello\")"
+        "circomlibjs pedersen.hash(\"Hello\")"
+    );
+}
+
+#[test]
+fn matches_circomlibjs_multisegment_vector() {
+    // bytes 0..64 = 512 bits → 128 windows → 3 segments, exercising base
+    // points 0, 1 and 2 (and the cross-segment accumulation).
+    let msg: Vec<u8> = (0u8..64).collect();
+    assert_eq!(
+        circom_packed(&msg),
+        "58b7b97eb2fd6adb8e43a6ec24ee3c27a92bae7e6375a86f426d076d4b3ed826",
+        "circomlibjs pedersen.hash(bytes 0..64)"
     );
 }
