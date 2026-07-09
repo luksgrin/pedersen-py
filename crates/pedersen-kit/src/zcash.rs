@@ -1,14 +1,18 @@
 //! Zcash Sapling Pedersen hash (feature `zcash`).
 //!
-//! Reconstructs Zcash's real generators (BLAKE2s+URS find-group-hash) and its
-//! parity-signed point decompression, wired onto the shared skeleton with the
-//! [`BoweHopwood`] encoding and [`XCoordinate`] output. Byte-compatible with
-//! `zcash/zcash-test-vectors` (verified in `tests/zcash.rs`).
+//! Byte-compatible with `zcash/zcash-test-vectors` (verified in `tests/zcash.rs`).
+//! [`JubjubSapling`] is a reusable hasher: it derives each generator once and
+//! caches it, growing on demand. The first [`BAKED`] generators (for the default
+//! [`ZCASH_PH`] personalization) are shipped as constants; beyond that, or for
+//! any other personalization, generators are derived via the BLAKE2s+URS
+//! find-group-hash, so arbitrary-length input is supported. A test re-derives the
+//! baked table via BLAKE2s to prevent drift.
 
-use crate::{BoweHopwood, Generators, LsbFirst, Parameters, Pedersen, XCoordinate};
-use ark_ec::{twisted_edwards::TECurveConfig, AdditiveGroup, AffineRepr};
+use crate::{hash_bits, BitLayout, BoweHopwood, Encoding, LsbFirst, Parameters};
+use ark_ec::{twisted_edwards::TECurveConfig, AdditiveGroup, AffineRepr, CurveGroup};
 use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsConfig, EdwardsProjective, Fq};
 use ark_ff::{BigInt, BigInteger, Field, PrimeField};
+use core::str::FromStr;
 
 /// The standard personalization for Sapling's windowed Pedersen hash.
 pub const ZCASH_PH: [u8; 8] = *b"Zcash_PH";
@@ -18,37 +22,109 @@ const URS: &[u8] = b"096b36a5804bfacef1691e173c366a47ff5ba84a44f26ddd7e8d9f79d5b
 /// Chunks per segment (`c` in the Zcash spec).
 const SEGMENT_CHUNKS: usize = 63;
 
-/// Jubjub Pedersen hash matching Zcash Sapling (u-coordinate output).
-pub type JubjubSapling = Pedersen<EdwardsProjective, BoweHopwood, LsbFirst, XCoordinate>;
+/// Precomputed generators `(u, v)` for indices 0..6 under [`ZCASH_PH`]. These
+/// equal the BLAKE2s find-group-hash generators (checked by
+/// `baked_bases_match_blake`) and cover inputs up to `6 * 63 * 3 = 1134` bits.
+const BAKED: [(&str, &str); 6] = [
+    (
+        "52355368488200756720908213129543630848976972731871436319321443845291207170897",
+        "18372611905088487385433946659983357101887954355879737496286092836680199584970",
+    ),
+    (
+        "9787319019520772215561425571402619434275350335445140843695488791465664995454",
+        "617599303620822769724880923839314378351145790385632133893219494436232173713",
+    ),
+    (
+        "46254521528573726497224586973822974014192468152453531001037375756982829433973",
+        "24506313747297525290953778557147418250711256987769181747135349052620150133847",
+    ),
+    (
+        "22718818598176814730279188811725115822910786497974609492339302594899840639692",
+        "21482900543196151117444117927157074338652061209517124624989426821710350741737",
+    ),
+    (
+        "27058202516373004425968234366429922161775745886920564416371317087192362222289",
+        "33152712010531917481292916450097258839113870850090594303231218126810079660783",
+    ),
+    (
+        "44899967701403962114488563060475643935789150330315799264409868287497276170361",
+        "45648747605882624690586248172048386288129541878950585457687885861218308416154",
+    ),
+];
 
-/// Build a hasher (for the given personalization) with capacity for `segments`.
-pub fn hasher(personalization: [u8; 8], segments: usize) -> JubjubSapling {
-    Pedersen::from_params(Parameters::uniform::<BoweHopwood, _>(
-        &ZcashGenerators { personalization },
-        segments.max(1),
-        SEGMENT_CHUNKS,
-    ))
+/// A reusable Zcash Sapling Pedersen hasher. Generators are memoized across calls
+/// and extended as longer inputs require them.
+pub struct JubjubSapling {
+    params: Parameters<EdwardsProjective>,
+    personalization: [u8; 8],
 }
 
-/// Build a hasher sized for inputs up to `max_bytes` long.
-pub fn hasher_for_len(personalization: [u8; 8], max_bytes: usize) -> JubjubSapling {
-    hasher(
-        personalization,
-        (max_bytes * 8).div_ceil(3).div_ceil(SEGMENT_CHUNKS),
-    )
-}
-
-/// Zcash generators: `I_D_i(D, i) = find_group_hash(D, i2leosp(32, i-1))`.
-pub struct ZcashGenerators {
-    pub personalization: [u8; 8],
-}
-
-impl Generators<EdwardsProjective> for ZcashGenerators {
-    fn bases(&self, num_segments: usize) -> Vec<EdwardsProjective> {
-        (0..num_segments)
-            .map(|s| find_group_hash(&self.personalization, &(s as u32).to_le_bytes()))
-            .collect()
+impl Default for JubjubSapling {
+    fn default() -> Self {
+        Self::new()
     }
+}
+
+impl JubjubSapling {
+    /// A hasher for the standard `Zcash_PH` personalization.
+    pub fn new() -> Self {
+        Self::with_personalization(ZCASH_PH)
+    }
+
+    /// A hasher for a custom 8-byte personalization (baked table is bypassed).
+    pub fn with_personalization(personalization: [u8; 8]) -> Self {
+        Self {
+            params: Parameters {
+                generators: Vec::new(),
+                offset: EdwardsProjective::ZERO,
+            },
+            personalization,
+        }
+    }
+
+    /// Hash `data`, returning the u-coordinate.
+    pub fn hash(&mut self, data: &[u8]) -> Fq {
+        let segments = (data.len() * 8)
+            .div_ceil(3)
+            .div_ceil(SEGMENT_CHUNKS)
+            .max(1);
+        self.ensure(segments);
+        hash_bits::<EdwardsProjective, BoweHopwood>(&self.params, &LsbFirst::expand(data))
+            .into_affine()
+            .x
+    }
+
+    fn ensure(&mut self, segments: usize) {
+        while self.params.generators.len() < segments {
+            let base = generator(&self.personalization, self.params.generators.len());
+            self.params.generators.push(segment_powers(base));
+        }
+    }
+}
+
+/// `[base, base·16, base·16², …]` (`POWER_SHIFT = 4` → ×16 between chunks).
+fn segment_powers(base: EdwardsProjective) -> Vec<EdwardsProjective> {
+    let mut powers = Vec::with_capacity(SEGMENT_CHUNKS);
+    let mut cur = base;
+    for _ in 0..SEGMENT_CHUNKS {
+        powers.push(cur);
+        for _ in 0..<BoweHopwood as Encoding<EdwardsProjective>>::POWER_SHIFT {
+            cur = cur.double();
+        }
+    }
+    powers
+}
+
+/// Generator `idx` for `personalization`: the baked constant when it applies,
+/// else derived.
+fn generator(personalization: &[u8; 8], idx: usize) -> EdwardsProjective {
+    if *personalization == ZCASH_PH
+        && let Some(&(x, y)) = BAKED.get(idx)
+    {
+        return EdwardsAffine::new_unchecked(Fq::from_str(x).unwrap(), Fq::from_str(y).unwrap())
+            .into_group();
+    }
+    find_group_hash(personalization, &(idx as u32).to_le_bytes())
 }
 
 /// Zcash `find_group_hash`: append an incrementing counter byte until valid.
@@ -98,4 +174,20 @@ fn from_bytes(buf: &[u8; 32]) -> Option<EdwardsAffine> {
         u = -u;
     }
     Some(EdwardsAffine::new_unchecked(u, v))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The shipped constants must equal the BLAKE2s derivation (Zcash pattern).
+    #[test]
+    fn baked_bases_match_blake() {
+        for (i, &(x, y)) in BAKED.iter().enumerate() {
+            let baked =
+                EdwardsAffine::new_unchecked(Fq::from_str(x).unwrap(), Fq::from_str(y).unwrap());
+            let derived = find_group_hash(&ZCASH_PH, &(i as u32).to_le_bytes()).into_affine();
+            assert_eq!(baked, derived, "zcash base {i}");
+        }
+    }
 }
