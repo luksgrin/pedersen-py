@@ -44,11 +44,14 @@ jobs:
         run: pip install maturin
       - name: Build wheel
         run: maturin build --release -m crates/pedersenpy/Cargo.toml
-      - name: Type-check stubs (mypy)
+      - name: Install wheel and test tools
         run: |
-          pip install mypy
           pip install --no-index --find-links target/wheels pedersenpy
-          mypy crates/pedersenpy/tests/typing_smoke.py
+          pip install mypy pytest
+      - name: Type-check stubs (mypy)
+        run: mypy crates/pedersenpy/tests/typing_smoke.py
+      - name: Test bindings (pytest)
+        run: pytest crates/pedersenpy/tests -q
       - uses: actions/upload-artifact@v4
         with:
           name: pedersenpy-wheel
