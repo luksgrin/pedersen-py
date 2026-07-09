@@ -7,9 +7,9 @@
 //! derived via circom's BLAKE-256 find-group-hash, so arbitrary-length input is
 //! supported. A test re-derives the baked table via BLAKE-256 to prevent drift.
 
-use crate::{hash_bits, BitLayout, Circom, Encoding, LsbFirst, Parameters};
+use crate::{BitLayout, Circom, Encoding, LsbFirst, Parameters, hash_bits};
 use ark_babyjubjub::{EdwardsAffine, EdwardsConfig, EdwardsProjective, Fq};
-use ark_ec::{twisted_edwards::TECurveConfig, AdditiveGroup, AffineRepr, CurveGroup};
+use ark_ec::{AdditiveGroup, AffineRepr, CurveGroup, twisted_edwards::TECurveConfig};
 use ark_ff::{BigInt, BigInteger, Field, PrimeField};
 use blake_hash::{Blake256, Digest};
 use core::str::FromStr;
@@ -105,11 +105,10 @@ fn segment_powers(base: EdwardsProjective) -> Vec<EdwardsProjective> {
 /// Segment `idx`'s base point: the baked constant if available, else derived.
 pub fn base_point(idx: usize) -> EdwardsProjective {
     match BAKED.get(idx) {
-        Some(&(x, y)) => EdwardsAffine::new_unchecked(
-            Fq::from_str(x).unwrap(),
-            Fq::from_str(y).unwrap(),
-        )
-        .into_group(),
+        Some(&(x, y)) => {
+            EdwardsAffine::new_unchecked(Fq::from_str(x).unwrap(), Fq::from_str(y).unwrap())
+                .into_group()
+        }
         None => derive_base_point(idx),
     }
 }

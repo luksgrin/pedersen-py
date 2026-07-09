@@ -32,8 +32,8 @@
 //! bit/output conventions — a per-spec effort the skeleton makes localized, not
 //! free.
 
-use crate::components::{BoweHopwood, Deterministic, LsbFirst, Unsigned, WholePoint, XCoordinate};
 use crate::Pedersen;
+use crate::components::{BoweHopwood, Deterministic, LsbFirst, Unsigned, WholePoint, XCoordinate};
 
 /// Baby Jubjub group — the ERC-2494 curve (`ark-babyjubjub`).
 pub type BabyJubjub = ark_babyjubjub::EdwardsProjective;

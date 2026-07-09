@@ -8,8 +8,8 @@
 //! find-group-hash, so arbitrary-length input is supported. A test re-derives the
 //! baked table via BLAKE2s to prevent drift.
 
-use crate::{hash_bits, BitLayout, BoweHopwood, Encoding, LsbFirst, Parameters};
-use ark_ec::{twisted_edwards::TECurveConfig, AdditiveGroup, AffineRepr, CurveGroup};
+use crate::{BitLayout, BoweHopwood, Encoding, LsbFirst, Parameters, hash_bits};
+use ark_ec::{AdditiveGroup, AffineRepr, CurveGroup, twisted_edwards::TECurveConfig};
 use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsConfig, EdwardsProjective, Fq};
 use ark_ff::{BigInt, BigInteger, Field, PrimeField};
 use core::str::FromStr;
@@ -84,10 +84,7 @@ impl JubjubSapling {
 
     /// Hash `data`, returning the u-coordinate.
     pub fn hash(&mut self, data: &[u8]) -> Fq {
-        let segments = (data.len() * 8)
-            .div_ceil(3)
-            .div_ceil(SEGMENT_CHUNKS)
-            .max(1);
+        let segments = (data.len() * 8).div_ceil(3).div_ceil(SEGMENT_CHUNKS).max(1);
         self.ensure(segments);
         hash_bits::<EdwardsProjective, BoweHopwood>(&self.params, &LsbFirst::expand(data))
             .into_affine()

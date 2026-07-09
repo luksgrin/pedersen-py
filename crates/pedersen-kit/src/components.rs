@@ -21,11 +21,7 @@ impl<C: CurveGroup> Encoding<C> for Unsigned {
     const POWER_SHIFT: usize = 1;
 
     fn contribute(chunk: &[bool], power: &C) -> C {
-        if chunk[0] {
-            *power
-        } else {
-            C::ZERO
-        }
+        if chunk[0] { *power } else { C::ZERO }
     }
 }
 
@@ -73,11 +69,7 @@ impl<C: CurveGroup> Encoding<C> for Circom {
     fn contribute(chunk: &[bool], power: &C) -> C {
         let mag = 1 + chunk[0] as u64 + 2 * (chunk[1] as u64) + 4 * (chunk[2] as u64);
         let e = *power * C::ScalarField::from(mag);
-        if chunk[3] {
-            -e
-        } else {
-            e
-        }
+        if chunk[3] { -e } else { e }
     }
 }
 

@@ -173,7 +173,11 @@ where
 
     /// Configure with a uniform generator layout derived from a [`Generators`] source.
     pub fn uniform<G: Generators<C>>(gens: &G, segments: usize, chunks_per_segment: usize) -> Self {
-        Self::from_params(Parameters::uniform::<E, G>(gens, segments, chunks_per_segment))
+        Self::from_params(Parameters::uniform::<E, G>(
+            gens,
+            segments,
+            chunks_per_segment,
+        ))
     }
 
     pub fn params(&self) -> &Parameters<C> {

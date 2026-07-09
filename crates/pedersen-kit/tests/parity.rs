@@ -3,16 +3,18 @@
 //! generators. Covered across both curves, both encodings, several window
 //! layouts, and an input matrix (empty, edge, near-capacity, seeded-random).
 
-use ark_crypto_primitives::crh::{bowe_hopwood, pedersen, CRHScheme};
+use ark_crypto_primitives::crh::{CRHScheme, bowe_hopwood, pedersen};
 use ark_ec::{
-    twisted_edwards::{Projective, TECurveConfig},
     CurveGroup,
+    twisted_edwards::{Projective, TECurveConfig},
 };
 use ark_ff::PrimeField;
 use ark_std::{rand::RngCore, test_rng};
 
 use pedersen_kit::instances::{BabyJubjubPedersen, JubjubBoweHopwood};
-use pedersen_kit::{BoweHopwood, LsbFirst, Parameters, Pedersen, Unsigned, WholePoint, XCoordinate};
+use pedersen_kit::{
+    BoweHopwood, LsbFirst, Parameters, Pedersen, Unsigned, WholePoint, XCoordinate,
+};
 
 // A handful of window layouts, to prove the engine matches regardless of how the
 // generators are split into windows/segments.
@@ -40,7 +42,7 @@ fn inputs(cap_bytes: usize) -> Vec<Vec<u8>> {
         vec![0xff],
         vec![0x01, 0x80],
         b"pedersen".to_vec(),
-        vec![0xAB; cap_bytes],              // exactly at capacity
+        vec![0xAB; cap_bytes],                   // exactly at capacity
         vec![0x5A; cap_bytes.saturating_sub(1)], // one below capacity
     ];
     // Seeded-random messages of varied lengths.
@@ -64,7 +66,12 @@ fn assert_pedersen<C: CurveGroup, W: pedersen::Window>() {
     let cap_bytes = W::WINDOW_SIZE * W::NUM_WINDOWS / 8;
     for m in inputs(cap_bytes) {
         let theirs = pedersen::CRH::<C, W>::evaluate(&params, m.clone()).unwrap();
-        assert_eq!(theirs, ours.hash(&m), "pedersen mismatch on {} bytes", m.len());
+        assert_eq!(
+            theirs,
+            ours.hash(&m),
+            "pedersen mismatch on {} bytes",
+            m.len()
+        );
     }
 }
 
@@ -83,7 +90,12 @@ where
     let cap_bytes = W::WINDOW_SIZE * W::NUM_WINDOWS * 3 / 8;
     for m in inputs(cap_bytes) {
         let theirs = bowe_hopwood::CRH::<P, W>::evaluate(&params, m.clone()).unwrap();
-        assert_eq!(theirs, ours.hash(&m), "bowe_hopwood mismatch on {} bytes", m.len());
+        assert_eq!(
+            theirs,
+            ours.hash(&m),
+            "bowe_hopwood mismatch on {} bytes",
+            m.len()
+        );
     }
 }
 
@@ -116,8 +128,16 @@ fn bowe_hopwood_matches_arkworks() {
 fn instances_are_deterministic_and_input_sensitive() {
     let a = BabyJubjubPedersen::build(64, 4); // 256-bit capacity
     let b = BabyJubjubPedersen::build(64, 4);
-    assert_eq!(a.hash(b"same"), b.hash(b"same"), "generators must be reproducible");
-    assert_ne!(a.hash(b"alpha"), a.hash(b"omega"), "distinct inputs should differ");
+    assert_eq!(
+        a.hash(b"same"),
+        b.hash(b"same"),
+        "generators must be reproducible"
+    );
+    assert_ne!(
+        a.hash(b"alpha"),
+        a.hash(b"omega"),
+        "distinct inputs should differ"
+    );
 
     let bh = JubjubBoweHopwood::build(16, 40); // 16*40*3 = 1920-bit capacity
     assert_eq!(bh.hash(b"zcash"), bh.hash(b"zcash"));
