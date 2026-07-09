@@ -10,6 +10,6 @@ name = "pedersenpy"
 crate-type = ["cdylib"]
 
 [dependencies]
-pedersen-kit = { path = "../pedersen-kit" }
+pedersen-kit = { path = "../pedersen-kit", features = ["circom", "zcash"] }
 pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"] }
 ark-serialize = "0.6"

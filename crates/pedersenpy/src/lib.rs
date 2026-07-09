@@ -2,10 +2,12 @@
 //!
 //! Exposes concrete, monomorphized members of the Pedersen hash family (the core
 //! crate's generic skeleton can't cross the FFI boundary directly, so each
-//! exported class is one fully-configured instance). Each class is constructed
-//! with its window layout and hashes bytes, returning the serialized output.
+//! exported class is one fully-configured instance). Every class hashes bytes and
+//! returns the serialized output. `CircomPedersen` and `ZcashPedersen` are
+//! byte-compatible with circomlibjs and Zcash Sapling respectively.
 
 use ark_serialize::CanonicalSerialize;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -66,9 +68,61 @@ impl JubjubBoweHopwood {
     }
 }
 
+/// circom / iden3-compatible Baby Jubjub Pedersen hash (`circomlibjs pedersenHash`).
+///
+/// `hash(data)` returns the 32-byte packed point, byte-identical to circomlibjs.
+/// Generators are sized to the input on each call.
+#[pyclass]
+struct CircomPedersen;
+
+#[pymethods]
+impl CircomPedersen {
+    #[new]
+    fn new() -> Self {
+        CircomPedersen
+    }
+
+    fn hash<'py>(&self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
+        let packed = pedersen_kit::circom::hasher_for_len(data.len()).hash(data);
+        PyBytes::new(py, &packed)
+    }
+}
+
+/// Zcash Sapling Pedersen hash over Jubjub.
+///
+/// `hash(data)` returns the 32-byte little-endian u-coordinate. The optional
+/// 8-byte `personalization` defaults to `b"Zcash_PH"`. Generators are sized to
+/// the input on each call.
+#[pyclass]
+struct ZcashPedersen {
+    personalization: [u8; 8],
+}
+
+#[pymethods]
+impl ZcashPedersen {
+    #[new]
+    #[pyo3(signature = (personalization = None))]
+    fn new(personalization: Option<&[u8]>) -> PyResult<Self> {
+        let personalization = match personalization {
+            None => pedersen_kit::zcash::ZCASH_PH,
+            Some(bytes) => bytes
+                .try_into()
+                .map_err(|_| PyValueError::new_err("personalization must be exactly 8 bytes"))?,
+        };
+        Ok(ZcashPedersen { personalization })
+    }
+
+    fn hash<'py>(&self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
+        let u = pedersen_kit::zcash::hasher_for_len(self.personalization, data.len()).hash(data);
+        PyBytes::new(py, &to_bytes(&u))
+    }
+}
+
 #[pymodule]
 fn pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BabyJubjubPedersen>()?;
     m.add_class::<JubjubBoweHopwood>()?;
+    m.add_class::<CircomPedersen>()?;
+    m.add_class::<ZcashPedersen>()?;
     Ok(())
 }
