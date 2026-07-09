@@ -71,31 +71,35 @@ impl JubjubBoweHopwood {
 /// circom / iden3-compatible Baby Jubjub Pedersen hash (`circomlibjs pedersenHash`).
 ///
 /// `hash(data)` returns the 32-byte packed point, byte-identical to circomlibjs.
-/// Generators are sized to the input on each call.
+/// Reusable: generators are derived once and cached across calls, so reuse the
+/// same instance for repeated hashing.
 #[pyclass]
-struct CircomPedersen;
+struct CircomPedersen {
+    inner: pedersen_kit::circom::BabyJubjubCircom,
+}
 
 #[pymethods]
 impl CircomPedersen {
     #[new]
     fn new() -> Self {
-        CircomPedersen
+        Self {
+            inner: pedersen_kit::circom::BabyJubjubCircom::new(),
+        }
     }
 
-    fn hash<'py>(&self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
-        let packed = pedersen_kit::circom::hasher_for_len(data.len()).hash(data);
-        PyBytes::new(py, &packed)
+    fn hash<'py>(&mut self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &self.inner.hash(data))
     }
 }
 
 /// Zcash Sapling Pedersen hash over Jubjub.
 ///
 /// `hash(data)` returns the 32-byte little-endian u-coordinate. The optional
-/// 8-byte `personalization` defaults to `b"Zcash_PH"`. Generators are sized to
-/// the input on each call.
+/// 8-byte `personalization` defaults to `b"Zcash_PH"`. Reusable: generators are
+/// derived once and cached across calls.
 #[pyclass]
 struct ZcashPedersen {
-    personalization: [u8; 8],
+    inner: pedersen_kit::zcash::JubjubSapling,
 }
 
 #[pymethods]
@@ -103,18 +107,20 @@ impl ZcashPedersen {
     #[new]
     #[pyo3(signature = (personalization = None))]
     fn new(personalization: Option<&[u8]>) -> PyResult<Self> {
-        let personalization = match personalization {
-            None => pedersen_kit::zcash::ZCASH_PH,
-            Some(bytes) => bytes
-                .try_into()
-                .map_err(|_| PyValueError::new_err("personalization must be exactly 8 bytes"))?,
+        let inner = match personalization {
+            None => pedersen_kit::zcash::JubjubSapling::new(),
+            Some(bytes) => {
+                let p: [u8; 8] = bytes.try_into().map_err(|_| {
+                    PyValueError::new_err("personalization must be exactly 8 bytes")
+                })?;
+                pedersen_kit::zcash::JubjubSapling::with_personalization(p)
+            }
         };
-        Ok(ZcashPedersen { personalization })
+        Ok(ZcashPedersen { inner })
     }
 
-    fn hash<'py>(&self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
-        let u = pedersen_kit::zcash::hasher_for_len(self.personalization, data.len()).hash(data);
-        PyBytes::new(py, &to_bytes(&u))
+    fn hash<'py>(&mut self, py: Python<'py>, data: &[u8]) -> Bound<'py, PyBytes> {
+        PyBytes::new(py, &to_bytes(&self.inner.hash(data)))
     }
 }
 
