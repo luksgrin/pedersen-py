@@ -43,6 +43,11 @@ pub use ark_ec::CurveGroup;
 pub mod components;
 pub mod instances;
 
+#[cfg(feature = "circom")]
+pub mod circom;
+#[cfg(feature = "zcash")]
+pub mod zcash;
+
 pub use components::*;
 
 /// Precomputed parameters of a configured Pedersen hash.

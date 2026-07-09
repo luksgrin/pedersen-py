@@ -16,11 +16,16 @@ ark-ed-on-bls12-381 = "0.6"
 # `[patch.crates-io]` unifying the arkworks graph lives in the workspace root.
 ark-babyjubjub = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }
 
+# Optional: only pulled in when the matching spec-compat feature is enabled.
+blake-hash = { version = "0.4", optional = true }   # circom BLAKE-256 generators
+blake2s_simd = { version = "1", optional = true }   # Zcash BLAKE2s generators
+
+[features]
+default = []
+# Byte-compatible circom / iden3 (`circomlibjs pedersenHash`) instance.
+circom = ["dep:blake-hash"]
+# Byte-compatible Zcash Sapling Pedersen hash instance.
+zcash = ["dep:blake2s_simd"]
+
 [dev-dependencies]
 ark-crypto-primitives = { version = "0.6", features = ["crh"] }
-# Test-only: reproduce circomlib's BLAKE-256 find-group-hash generators to check
-# byte-compatibility against circomlibjs vectors. Not a dependency of the crate.
-blake-hash = "0.4"
-# Test-only: reproduce Zcash Sapling's BLAKE2s find-group-hash generators to check
-# byte-compatibility against zcash-test-vectors output. Not a dependency of the crate.
-blake2s_simd = "1"
