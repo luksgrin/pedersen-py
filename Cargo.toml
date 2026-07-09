@@ -1,15 +1,13 @@
-[package]
-name = "pedersenpy"
-version = "0.1.0"
-edition = "2024"
+[workspace]
+resolver = "2"
+members = ["crates/pedersen-kit", "crates/pedersenpy"]
 
-[lib]
-name = "pedersenpy"
-crate-type = ["cdylib"]
-
-[dependencies]
-babyjubjub-rs = "0.0.11"
-ff_ce = "0.11.0"
-num-bigint = "0.4.6"
-num-traits = "0.2.19"
-pyo3 = { version = "0.25.1", features = ["extension-module", "num-bigint"] }
+# `[patch]` must live at the workspace root. `ark-babyjubjub` is built from the
+# algebra git tree, which path-references its sibling `ark-*` crates; redirect the
+# crates.io versions to the same git revision so the whole graph shares one source.
+# Remove this whole section once `ark-babyjubjub` is published to crates.io.
+[patch.crates-io]
+ark-ff = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }
+ark-ec = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }
+ark-serialize = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }
+ark-poly = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }

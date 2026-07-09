@@ -1,0 +1,26 @@
+[package]
+name = "pedersen-kit"
+version = "0.1.0"
+edition = "2024"
+description = "A single skeleton for constructing the family of Pedersen hash functions over arkworks curves"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+ark-ec = "0.6"
+ark-ff = "0.6"
+ark-serialize = "0.6"
+ark-std = "0.6"
+ark-ed-on-bls12-381 = "0.6"
+# ERC-2494 Baby Jubjub: not yet on crates.io. Pinned to arkworks-rs/algebra#1123
+# until it merges and publishes; then switch to a version requirement. The
+# `[patch.crates-io]` unifying the arkworks graph lives in the workspace root.
+ark-babyjubjub = { git = "https://github.com/luksgrin/algebra", rev = "4e3af11901a13daa6aacfa441bdc2087a05ceba4" }
+
+[dev-dependencies]
+ark-crypto-primitives = { version = "0.6", features = ["crh"] }
+# Test-only: reproduce circomlib's BLAKE-256 find-group-hash generators to check
+# byte-compatibility against circomlibjs vectors. Not a dependency of the crate.
+blake-hash = "0.4"
+# Test-only: reproduce Zcash Sapling's BLAKE2s find-group-hash generators to check
+# byte-compatibility against zcash-test-vectors output. Not a dependency of the crate.
+blake2s_simd = "1"
