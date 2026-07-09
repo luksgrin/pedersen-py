@@ -1,8 +1,8 @@
 //! Byte-compatibility with Zcash Sapling's Pedersen hash.
 //!
-//! Drives the library's `zcash` instance against a table of outputs from
-//! `zcash/zcash-test-vectors` spanning empty input through multi-segment inputs
-//! reaching generator indices 0..=5 (segments are 189 bits = non-byte-aligned).
+//! Drives one reusable `JubjubSapling` (memoized generators) against a table of
+//! outputs from `zcash/zcash-test-vectors`. The 200-byte case needs 9 segments,
+//! exercising the BLAKE2s fallback beyond the baked table.
 //!
 //! Run with `--features zcash`.
 #![cfg(feature = "zcash")]
@@ -11,14 +11,14 @@ use ark_ec::CurveGroup;
 use ark_ed_on_bls12_381::Fq;
 use core::str::FromStr;
 
-use pedersen_kit::zcash::{find_group_hash, hasher_for_len, ZCASH_PH};
+use pedersen_kit::zcash::{find_group_hash, JubjubSapling, ZCASH_PH};
 
 fn input(len: usize) -> Vec<u8> {
     (0..len).map(|i| i as u8).collect()
 }
 
-/// (input byte-length, Zcash `pedersen_hash` u-coordinate as decimal).
-/// Input is the byte sequence 0,1,2,…,len-1.
+/// (input byte-length, Zcash `pedersen_hash` u-coordinate as decimal). Input is
+/// the byte sequence 0,1,…,len-1. Segments are 189 bits (non-byte-aligned).
 const VECTORS: &[(usize, &str)] = &[
     (0, "0"),
     (1, "18199356453276551058544483067971537764100958815371062302545925104228111306218"),
@@ -30,12 +30,14 @@ const VECTORS: &[(usize, &str)] = &[
     (64, "37515569649653130145499701737487402729855929021425639231448526651152569150619"),
     (96, "8119631812570225468889042567948308638876073095616697550291528740446269199445"),
     (127, "5071382384466765121380455708522877243045923848243135694876540672176850044532"),
+    // 200 bytes → 9 segments → uses baked bases 0..6 and BLAKE2s for 6,7,8.
+    (200, "42827919558462980191913516929316077916340907458449651636274249305684465418543"),
 ];
 
 #[test]
 fn matches_zcash_vectors() {
+    let mut hasher = JubjubSapling::new(); // reused: exercises memoized growth
     for &(len, expected) in VECTORS {
-        let hasher = hasher_for_len(ZCASH_PH, len);
         assert_eq!(hasher.hash(&input(len)), Fq::from_str(expected).unwrap(), "zcash len {len}");
     }
 }
