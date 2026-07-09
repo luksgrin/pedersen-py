@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.7,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "pedersenpy"
+version = "0.1.0"
+description = "Construct and invoke Pedersen hash functions (Rust-backed, arkworks)"
+requires-python = ">=3.9"
+
+[tool.maturin]
+module-name = "pedersenpy"

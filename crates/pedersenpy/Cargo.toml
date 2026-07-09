@@ -1,0 +1,15 @@
+[package]
+name = "pedersenpy"
+version = "0.1.0"
+edition = "2024"
+description = "Python bindings for pedersen-kit: construct and invoke Pedersen hash functions"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "pedersenpy"
+crate-type = ["cdylib"]
+
+[dependencies]
+pedersen-kit = { path = "../pedersen-kit" }
+pyo3 = { version = "0.25", features = ["extension-module", "abi3-py39"] }
+ark-serialize = "0.6"
