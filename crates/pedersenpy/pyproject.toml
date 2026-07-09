@@ -9,4 +9,5 @@ description = "Construct and invoke Pedersen hash functions (Rust-backed, arkwor
 requires-python = ">=3.9"
 
 [tool.maturin]
-module-name = "pedersenpy"
+module-name = "pedersenpy._pedersenpy"
+python-source = "python"

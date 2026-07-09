@@ -127,7 +127,7 @@ impl ZcashPedersen {
 }
 
 #[pymodule]
-fn pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _pedersenpy(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<BabyJubjubPedersen>()?;
     m.add_class::<JubjubBoweHopwood>()?;
     m.add_class::<CircomPedersen>()?;
