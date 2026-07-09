@@ -3,7 +3,7 @@ name = "pedersen-kit"
 version = "0.1.0"
 edition = "2024"
 description = "A single skeleton for constructing the family of Pedersen hash functions over arkworks curves"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 
 [dependencies]
 ark-ec = "0.6"
