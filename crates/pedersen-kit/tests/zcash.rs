@@ -1,116 +1,55 @@
 //! Byte-compatibility with Zcash Sapling's Pedersen hash.
 //!
-//! Zcash's `encode_chunk`/`encode_segment` are exactly our `BoweHopwood` encoding
-//! (signed 3-bit chunks, radix 2⁴), the output is the u-coordinate (`XCoordinate`),
-//! and segments hold `c = 63` chunks. The two spec-specific pieces — the BLAKE2s
-//! find-group-hash generators and the point decompression — are reconstructed
-//! here (TEST-ONLY, via the `blake2s_simd` dev-dep) and driven through the library
-//! skeleton. Reference values come from `zcash/zcash-test-vectors` (sapling).
+//! Drives the library's `zcash` instance against a table of outputs from
+//! `zcash/zcash-test-vectors` spanning empty input through multi-segment inputs
+//! reaching generator indices 0..=5 (segments are 189 bits = non-byte-aligned).
 //!
-//! arkworks `ed_on_bls12_381` is Zcash's Jubjub curve, so its (x, y) == Zcash's
-//! (u, v); the assertion on generator 1 confirms this.
+//! Run with `--features zcash`.
+#![cfg(feature = "zcash")]
 
-use ark_ec::{twisted_edwards::TECurveConfig, AdditiveGroup, AffineRepr, CurveGroup};
-use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsConfig, EdwardsProjective, Fq};
-use ark_ff::{BigInt, BigInteger, Field, PrimeField};
+use ark_ec::CurveGroup;
+use ark_ed_on_bls12_381::Fq;
 use core::str::FromStr;
 
-use pedersen_kit::{BoweHopwood, LsbFirst, Parameters, Pedersen, XCoordinate};
+use pedersen_kit::zcash::{find_group_hash, hasher_for_len, ZCASH_PH};
 
-/// The fixed 64-byte "uniform random string" prepended to every group-hash input.
-const URS: &[u8] = b"096b36a5804bfacef1691e173c366a47ff5ba84a44f26ddd7e8d9f79d5b42df0";
-
-/// Jubjub `Point.from_bytes`: 32 LE bytes → point, sign taken from u's parity.
-fn from_bytes(buf: &[u8; 32]) -> Option<EdwardsAffine> {
-    let u_sign = buf[31] >> 7;
-    let mut b = *buf;
-    b[31] &= 0x7f;
-
-    let mut limbs = [0u64; 4];
-    for (i, limb) in limbs.iter_mut().enumerate() {
-        *limb = u64::from_le_bytes(b[i * 8..i * 8 + 8].try_into().unwrap());
-    }
-    let v = Fq::from_bigint(BigInt::new(limbs))?; // None if >= modulus
-
-    let a = <EdwardsConfig as TECurveConfig>::COEFF_A;
-    let d = <EdwardsConfig as TECurveConfig>::COEFF_D;
-    let vv = v * v;
-    let u2 = (vv - Fq::ONE) * (vv * d - a).inverse()?;
-    let mut u = u2.sqrt()?;
-    if (u.into_bigint().is_odd() as u8) != u_sign {
-        u = -u;
-    }
-    Some(EdwardsAffine::new_unchecked(u, v))
+fn input(len: usize) -> Vec<u8> {
+    (0..len).map(|i| i as u8).collect()
 }
 
-/// Zcash `group_hash`: BLAKE2s(person=D) over URS‖M, decompress, clear cofactor.
-fn group_hash(d: &[u8], m: &[u8]) -> Option<EdwardsProjective> {
-    let mut params = blake2s_simd::Params::new();
-    params.hash_length(32).personal(d);
-    let hash = params.to_state().update(URS).update(m).finalize();
-    let bytes: [u8; 32] = hash.as_bytes().try_into().unwrap();
+/// (input byte-length, Zcash `pedersen_hash` u-coordinate as decimal).
+/// Input is the byte sequence 0,1,2,…,len-1.
+const VECTORS: &[(usize, &str)] = &[
+    (0, "0"),
+    (1, "18199356453276551058544483067971537764100958815371062302545925104228111306218"),
+    (7, "30099464267017412800553966313415301452778432059177165170366978351914608846776"),
+    (16, "12696241130161684714785648917475044367558106373835603479612743300999431757347"),
+    (25, "40252675167179038683265079502460445549985017473999381908939385819683359801490"),
+    (26, "1491362650589562623177075487200112341461920652079790862413814396101342312904"),
+    (32, "25017417399659973419738556147872271958000867140359490243475813708054159729475"),
+    (64, "37515569649653130145499701737487402729855929021425639231448526651152569150619"),
+    (96, "8119631812570225468889042567948308638876073095616697550291528740446269199445"),
+    (127, "5071382384466765121380455708522877243045923848243135694876540672176850044532"),
+];
 
-    let p = from_bytes(&bytes)?;
-    let q = p.into_group().double().double().double(); // ×8
-    if q == EdwardsProjective::ZERO {
-        None
-    } else {
-        Some(q)
+#[test]
+fn matches_zcash_vectors() {
+    for &(len, expected) in VECTORS {
+        let hasher = hasher_for_len(ZCASH_PH, len);
+        assert_eq!(hasher.hash(&input(len)), Fq::from_str(expected).unwrap(), "zcash len {len}");
     }
-}
-
-/// Zcash `find_group_hash`: append an incrementing counter byte until valid.
-fn find_group_hash(d: &[u8], m: &[u8]) -> EdwardsProjective {
-    for i in 0u8..=255 {
-        let mut mm = m.to_vec();
-        mm.push(i);
-        if let Some(p) = group_hash(d, &mm) {
-            return p;
-        }
-    }
-    panic!("no valid group hash point found");
-}
-
-/// Hash `msg` with the Zcash Sapling configuration and return the u-coordinate.
-///
-/// Builds one generator per `3·c = 189`-bit segment (`c = 63` chunks), so inputs
-/// spanning multiple segments exercise generators for indices 1, 2, … just as
-/// `I_D_i(D, i)` does.
-fn zcash_hash(msg: &[u8]) -> Fq {
-    let d = b"Zcash_PH";
-    let n_chunks = (msg.len() * 8).div_ceil(3); // 3-bit chunks
-    let n_segments = n_chunks.div_ceil(63).max(1); // c = 63 chunks per segment
-    let generators = (0..n_segments)
-        .map(|s| {
-            // I_D_i(D, i) with i = s + 1  →  find_group_hash(D, i2leosp(32, s)).
-            let mut powers = Vec::with_capacity(63);
-            let mut cur = find_group_hash(d, &(s as u32).to_le_bytes());
-            for _ in 0..63 {
-                powers.push(cur);
-                for _ in 0..4 {
-                    cur = cur.double(); // POWER_SHIFT = 4  →  ×16 between chunks
-                }
-            }
-            powers
-        })
-        .collect();
-    Pedersen::<EdwardsProjective, BoweHopwood, LsbFirst, XCoordinate>::from_params(
-        Parameters::adopt(generators),
-    )
-    .hash(msg)
 }
 
 #[test]
 fn generator_one_matches_reference() {
     // find_group_hash(D, i2leosp(32, 0)); confirms arkworks Jubjub (x, y) == Zcash (u, v).
-    let g = find_group_hash(b"Zcash_PH", &[0, 0, 0, 0]).into_affine();
+    let g = find_group_hash(&ZCASH_PH, &[0, 0, 0, 0]).into_affine();
     assert_eq!(
         g.x,
         Fq::from_str(
             "52355368488200756720908213129543630848976972731871436319321443845291207170897"
         )
         .unwrap(),
-        "generator 1 u-coordinate"
     );
     assert_eq!(
         g.y,
@@ -118,34 +57,5 @@ fn generator_one_matches_reference() {
             "18372611905088487385433946659983357101887954355879737496286092836680199584970"
         )
         .unwrap(),
-        "generator 1 v-coordinate"
-    );
-}
-
-#[test]
-fn matches_zcash_sapling_vector() {
-    // "Hello" = 40 bits → 14 chunks → a single segment (generator index 0 only).
-    assert_eq!(
-        zcash_hash(b"Hello"),
-        Fq::from_str(
-            "8754254972755604884333948367738998890971419059392001151429652007230018821080"
-        )
-        .unwrap(),
-        "pedersen_hash(\"Hello\")"
-    );
-}
-
-#[test]
-fn matches_zcash_sapling_multisegment_vector() {
-    // bytes 0..64 = 512 bits → 171 chunks → 3 segments, exercising generator
-    // indices 0, 1 and 2.
-    let msg: Vec<u8> = (0u8..64).collect();
-    assert_eq!(
-        zcash_hash(&msg),
-        Fq::from_str(
-            "37515569649653130145499701737487402729855929021425639231448526651152569150619"
-        )
-        .unwrap(),
-        "pedersen_hash(bytes 0..64)"
     );
 }
