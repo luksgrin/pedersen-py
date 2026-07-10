@@ -2,7 +2,7 @@
 //!
 //! Byte-compatible with `zcash/zcash-test-vectors` (verified in `tests/zcash.rs`).
 //! [`JubjubSapling`] is a reusable hasher: it derives each generator once and
-//! caches it, growing on demand. The first [`BAKED`] generators (for the default
+//! caches it, growing on demand. The first six generators (for the default
 //! [`ZCASH_PH`] personalization) are shipped as constants; beyond that, or for
 //! any other personalization, generators are derived via the BLAKE2s+URS
 //! find-group-hash, so arbitrary-length input is supported. A test re-derives the

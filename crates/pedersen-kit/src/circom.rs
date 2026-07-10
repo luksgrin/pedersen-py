@@ -2,8 +2,8 @@
 //!
 //! Byte-compatible with `circomlibjs`' `pedersenHash` (verified in
 //! `tests/circom.rs`). [`BabyJubjubCircom`] is a reusable hasher: it derives each
-//! generator once and caches it, growing on demand. The first [`BAKED`] base
-//! points are shipped as constants (no BLAKE-256 needed); beyond that they are
+//! generator once and caches it, growing on demand. The first six base points
+//! are shipped as baked constants (no BLAKE-256 needed); beyond that they are
 //! derived via circom's BLAKE-256 find-group-hash, so arbitrary-length input is
 //! supported. A test re-derives the baked table via BLAKE-256 to prevent drift.
 
