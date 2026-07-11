@@ -1,6 +1,6 @@
 [package]
 name = "pedersen-kit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 description = "A single skeleton for constructing the family of Pedersen hash functions over arkworks curves"
 license = "MIT"
