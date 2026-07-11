@@ -1,0 +1,90 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch: # manual runs build wheels but do not publish
+
+permissions:
+  contents: read
+
+jobs:
+  # Build self-contained abi3 wheels for each platform.
+  wheels:
+    name: Wheels (${{ matrix.platform.id }})
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - { id: linux-x86_64, runner: ubuntu-latest }
+          - { id: macos-arm64, runner: macos-14 }
+          - { id: macos-x86_64, runner: macos-13 }
+          - { id: windows-x64, runner: windows-latest }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          args: --release --out dist -m crates/pedersenpy/Cargo.toml
+          manylinux: auto
+          sccache: "true"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.platform.id }}
+          path: dist/*.whl
+
+  # Publish to PyPI on a version tag, via Trusted Publishing (OIDC — no token).
+  # Requires a PyPI trusted publisher configured for this repo + the "pypi"
+  # environment + this workflow file.
+  pypi:
+    name: Publish to PyPI
+    needs: wheels
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/pedersenpy
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag must match pedersenpy version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(grep -m1 '^version' crates/pedersenpy/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+          echo "tag=$TAG  version=$VER"
+          test "$TAG" = "$VER" || { echo "::error::tag v$TAG does not match pedersenpy version $VER"; exit 1; }
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          # Wheels only — an sdist would try to resolve the ark-babyjubjub git
+          # dependency at the user's install time.
+
+  # Publish pedersen-kit to crates.io.
+  #
+  # BLOCKED until `ark-babyjubjub` is released on crates.io: crates.io forbids
+  # git dependencies and ignores [patch]. To enable, once it lands:
+  #   1. replace the git dep with a version + drop the workspace [patch.crates-io]
+  #   2. add a CARGO_REGISTRY_TOKEN secret
+  #   3. set the repository variable PUBLISH_CRATE = true
+  crates:
+    name: Publish pedersen-kit to crates.io
+    if: startsWith(github.ref, 'refs/tags/v') && vars.PUBLISH_CRATE == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tag must match pedersen-kit version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          VER="$(grep -m1 '^version' crates/pedersen-kit/Cargo.toml | sed -E 's/.*"(.*)".*/\1/')"
+          test "$TAG" = "$VER" || { echo "::error::tag v$TAG does not match pedersen-kit version $VER"; exit 1; }
+      - run: cargo publish -p pedersen-kit
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
