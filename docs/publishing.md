@@ -26,7 +26,7 @@ When it lands:
    ark-babyjubjub = "0.x"
    ```
 2. Delete the `[patch.crates-io]` block from the workspace root `Cargo.toml`.
-3. Verify and publish:
+3. Add a `CARGO_REGISTRY_TOKEN` repository secret, then set the repository variable `PUBLISH_CRATE = true` to enable the (currently gated) `crates` job in the release workflow — or publish manually:
    ```bash
    cargo test -p pedersen-kit
    cargo publish -p pedersen-kit
@@ -45,45 +45,21 @@ maturin build --release -m crates/pedersenpy/Cargo.toml
 # → target/wheels/pedersenpy-0.1.0-cp39-abi3-<platform>.whl
 ```
 
-### Release workflow (multi-platform wheels)
+### Release workflow
 
-Use [`PyO3/maturin-action`](https://github.com/PyO3/maturin-action) to build Linux (manylinux), macOS, and Windows wheels on a tag, then publish. Sketch:
+The repository ships [`.github/workflows/release.yml`](https://github.com/luksgrin/pedersen-py/blob/main/.github/workflows/release.yml), triggered on `v*` tags. It builds abi3 wheels for Linux (manylinux), macOS (arm64 + x86_64), and Windows with [`PyO3/maturin-action`](https://github.com/PyO3/maturin-action), then publishes to PyPI via **[Trusted Publishing (OIDC)](https://docs.pypi.org/trusted-publishers/)** — no API token.
 
-```yaml
-name: Release
-on:
-  push:
-    tags: ["v*"]
+**One-time setup**
 
-jobs:
-  wheels:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: PyO3/maturin-action@v1
-        with:
-          command: build
-          args: --release -m crates/pedersenpy/Cargo.toml
-          manylinux: auto
-      - uses: actions/upload-artifact@v4
-        with: { name: wheels-${{ matrix.os }}, path: target/wheels/*.whl }
+1. On PyPI, register a Trusted Publisher for this repository, workflow `release.yml`, environment `pypi`.
+2. Create a GitHub Actions environment named `pypi`.
 
-  publish:
-    needs: wheels
-    runs-on: ubuntu-latest
-    environment: pypi          # configure PyPI Trusted Publishing for this repo/environment
-    permissions: { id-token: write }
-    steps:
-      - uses: actions/download-artifact@v4
-        with: { path: dist, merge-multiple: true }
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with: { packages-dir: dist }
-```
+**Cutting a release**
 
-Prefer **[PyPI Trusted Publishing (OIDC)](https://docs.pypi.org/trusted-publishers/)** over long-lived API tokens.
+1. Bump the version in `crates/pedersenpy/Cargo.toml`, `crates/pedersen-kit/Cargo.toml`, and `crates/pedersenpy/pyproject.toml` (the workflow fails if the tag doesn't match).
+2. `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+A `workflow_dispatch` run builds the wheels without publishing (useful for testing).
 
 !!! note "sdist caveat"
     An sdist (source distribution) would try to resolve the `ark-babyjubjub` git dependency at install time on the user's machine. Ship **wheels only** until the crate is published, or omit the sdist from the release.
