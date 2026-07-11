@@ -30,7 +30,7 @@
 A Pedersen hash maps a message to a sum of scalar multiples of fixed points in a prime-order group $\mathbb{G}$. Collision resistance reduces to the hardness of the discrete logarithm in $\mathbb{G}$. Every member of the family is the single multi-scalar multiplication
 
 $$
-H(m) \;=\; O \;+\; \sum_{k} \mathrm{contribute}\!\left(c_k,\; P_k\right),
+H(m) = O + \sum_{k} \mathrm{contribute}\left(c_k, P_k\right),
 $$
 
 where the message is turned into a bit stream, the bits are grouped into fixed-size **chunks** $c_k$, each chunk is combined with a precomputed **generator power** $P_k$, the terms are summed, an optional constant **offset** $O$ is added, and the resulting group element is serialized.
@@ -79,7 +79,7 @@ flowchart LR
 
 ## The four axes
 
-Within a **segment**, consecutive chunks share one base point $G$ and are weighted by a radix $R = 2^{\text{POWER\_SHIFT}}$; the precomputed powers are $P = \{G,\, R\,G,\, R^2 G, \dots\}$. A new base point begins every $c$ chunks.
+Within a **segment**, consecutive chunks share one base point $G$ and are weighted by a radix $R = 2^{\text{POWER\\_SHIFT}}$; the precomputed powers are $P = \{G, RG, R^2 G, \dots\}$. A new base point begins every $c$ chunks.
 
 ### `Encoding` — chunk $\to$ contribution
 
@@ -92,27 +92,27 @@ Within a **segment**, consecutive chunks share one base point $G$ and are weight
 **Unsigned windows.** A window of bits $b_j$ contributes its binary value times the base:
 
 $$
-\sum_{j} b_j\, 2^{j}\, G .
+\sum_{j} b_j 2^{j} G .
 $$
 
 **Bowe–Hopwood / Zcash.** Each 3-bit chunk $(s_0,s_1,s_2)$ encodes the signed digit
 
 $$
-\mathrm{enc}(s_0,s_1,s_2) \;=\; (1 - 2 s_2)\,(1 + s_0 + 2 s_1) \;\in\; \{-4,\dots,-1,1,\dots,4\},
+\mathrm{enc}(s_0,s_1,s_2) = (1 - 2 s_2)(1 + s_0 + 2 s_1) \in \{-4,\dots,-1,1,\dots,4\},
 $$
 
-and a segment of $k$ chunks forms the scalar $\displaystyle \langle M_i\rangle = \sum_{j=1}^{k} \mathrm{enc}(c_{i,j})\, 2^{4(j-1)}$, so $H = \sum_i \langle M_i\rangle\, G_i$.
+and a segment of $k$ chunks forms the scalar $\displaystyle \langle M_i\rangle = \sum_{j=1}^{k} \mathrm{enc}(c_{i,j}) 2^{4(j-1)}$, so $H = \sum_i \langle M_i\rangle G_i$.
 
 **circom.** Each 4-bit window is 3 magnitude bits and 1 sign bit, giving the digit
 
 $$
-\pm\bigl(1 + s_0 + 2 s_1 + 4 s_2\bigr) \;\in\; \{-8,\dots,-1,1,\dots,8\},
+\pm\bigl(1 + s_0 + 2 s_1 + 4 s_2\bigr) \in \{-8,\dots,-1,1,\dots,8\},
 $$
 
 with windows spaced by $2^{5}$ within a segment.
 
 ### `BitLayout` — bytes $\to$ bits
-`LsbFirst` (bit $i$ of a byte is $(\text{byte} \gg i)\,\&\,1$ — matches arkworks `bytes_to_bits` and circom `buffer2bits`) and `MsbFirst`.
+`LsbFirst` (bit $i$ of a byte is $(\text{byte} \gg i)\\&1$ — matches arkworks `bytes_to_bits` and circom `buffer2bits`) and `MsbFirst`.
 
 ### `Generators` — base points (and offset)
 `Deterministic` (reproducible, generic), or the spec-exact `circom::CircomGenerators` / `zcash::ZcashGenerators` (see [Generators](#generators)).
@@ -127,7 +127,7 @@ with windows spaced by $2^{5}$ within a segment.
 **Baby Jubjub** ([ERC-2494](https://eips.ethereum.org/EIPS/eip-2494)) is the twisted Edwards curve
 
 $$
-A x^2 + y^2 = 1 + D x^2 y^2, \qquad A = 168700,\; D = 168696,
+A x^2 + y^2 = 1 + D x^2 y^2, \qquad A = 168700, D = 168696,
 $$
 
 over $\mathbb{F}_q$ with $q = 21888242871839275222246405745257275088548364400416034343698204186575808495617$ (the BN254 scalar field), cofactor $8$, and a prime-order subgroup of order $\ell$. It is provided by [`ark-babyjubjub`](https://github.com/arkworks-rs/algebra/pull/1123).
@@ -142,8 +142,8 @@ over $\mathbb{F}_q$ with $q = 21888242871839275222246405745257275088548364400416
 
 The spec generators are *not* arbitrary — each ecosystem derives them from a public hash (a "nothing-up-my-sleeve" construction), so byte compatibility requires reproducing that exact hash:
 
-- **circom:** base point $i = 8 \cdot \operatorname{decompress}\bigl(\mathrm{BLAKE\text{-}256}(s)\bigr)$, where the seed $s$ is the ASCII string `"PedersenGenerator_<i>_<t>"` and the try-counter $t$ increments until the digest decodes to a valid curve point.
-- **Zcash:** generator $i = 8 \cdot \operatorname{decompress}\bigl(\mathrm{BLAKE2s}(\mathrm{URS} \,\Vert\, i)\bigr)$, with BLAKE2s personalized by `Zcash_PH` and $\mathrm{URS}$ a fixed 64-byte string.
+- **circom:** base point $i = 8 \cdot \text{decompress}\bigl(\mathrm{BLAKE\text{-}256}(s)\bigr)$, where the seed $s$ is the ASCII string `"PedersenGenerator_<i>_<t>"` and the try-counter $t$ increments until the digest decodes to a valid curve point.
+- **Zcash:** generator $i = 8 \cdot \text{decompress}\bigl(\mathrm{BLAKE2s}(\mathrm{URS} \Vert i)\bigr)$, with BLAKE2s personalized by `Zcash_PH` and $\mathrm{URS}$ a fixed 64-byte string.
 
 To stay fast *and* correct, generators are resolved like this (mirroring `sapling-crypto`, which ships baked constants and re-derives them in a test):
 
@@ -167,10 +167,10 @@ flowchart TD
 
 ## Point compression: the circom vs Zcash subtlety
 
-Both compress a point to 32 bytes as the $y$/$v$ coordinate (little-endian) with the *sign* of $x$/$u$ in the top bit — but they define "sign" differently. For a prime $q$, a point and its negation have $x$ and $q - x$; both rules below uniquely pick one:
+Both compress a point to 32 bytes as the $y/v$ coordinate (little-endian) with the *sign* of $x$/$u$ in the top bit — but they define "sign" differently. For a prime $q$, a point and its negation have $x$ and $q - x$; both rules below uniquely pick one:
 
 $$
-\text{circom (half):}\quad \text{sign} = \bigl[\,x > \tfrac{q-1}{2}\,\bigr]
+\text{circom (half):}\quad \text{sign} = \bigl[x > \tfrac{q-1}{2}\bigr]
 \qquad\qquad
 \text{Zcash (parity):}\quad \text{sign} = x \bmod 2 .
 $$
