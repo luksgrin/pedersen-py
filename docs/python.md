@@ -5,10 +5,12 @@
 ## Installing
 
 ```bash
-pip install pedersenpy          # once published on PyPI
+pip install pedersenpy
 ```
 
-Until then, build a self-contained wheel (see [Publishing](publishing.md)):
+Available on [PyPI](https://pypi.org/project/pedersenpy/). Wheels are self-contained (`abi3`, Python ≥ 3.9) — no Rust toolchain needed to install.
+
+To build from source instead (see [Publishing](publishing.md)):
 
 ```bash
 maturin build --release -m crates/pedersenpy/Cargo.toml

@@ -4,6 +4,8 @@
 
 `arkworks`, `circomlib`/`iden3`, and `Zcash Sapling` all define "a Pedersen hash," but their outputs disagree byte-for-byte. This project shows they are the *same* construction with different parameters, implements it **once**, and recovers each ecosystem's hash by plugging in the right components — validated **byte-for-byte** against every reference.
 
+The Python package is on [**PyPI**](https://pypi.org/project/pedersenpy/): `pip install pedersenpy`.
+
 <div class="grid cards" markdown>
 
 - :material-language-rust: **Rust core** — `pedersen-kit`: a generic engine + four pluggable axes.
@@ -31,7 +33,7 @@
 === "Python"
 
     ```bash
-    pip install pedersenpy   # once published; until then, build a wheel (see Publishing)
+    pip install pedersenpy   # on PyPI: https://pypi.org/project/pedersenpy/
     ```
 
     ```python
